@@ -61,7 +61,23 @@ class Game
 			throw new InvalidMoveException("Déplacement interdit pour cette pièce");
 		}
 
+		// On mémorise une éventuelle pièce capturée AVANT de simuler
+		$capturedPiece = $this->board->getPieceAt($to);
+		
+		// Simulation du coup
 		$this->board->movePiece($from, $to);
+
+		// Le coup expose-t-il MON roi ?
+		if ($this->isCheck($this->currentPlayer)) {
+			// Annulation : on remet la pièce en arrière...
+			$this->board->movePiece($to, $from);
+			// ...et on restaure la capture si elle existait
+			if ($capturedPiece !== null) {
+				$capturedPiece->setPosition($to);
+				$this->board->placePiece($capturedPiece);
+			}
+			throw new InvalidMoveException("Ce coup exposerait votre roi à l'échec");
+		}
 
 		$this->switchPlayer();
 	}
@@ -84,6 +100,53 @@ class Game
 
 		return false;
 	}
+
+	public function isCheckmate(PieceColor $color): bool
+	{
+		if (!$this->isCheck($color)) {
+			return false;
+		}
+
+		foreach ($this->board->getPieces() as $piece) {
+			if ($piece->getColor() !== $color) {
+				continue;
+			}
+
+			$from = $piece->getPosition();
+
+			for ($row = 0; $row < 8; $row++) {
+				for ($col = 0; $col < 8; $col++) {
+					$to = new Position($row, $col);
+
+					if ($to->equals($from)) {
+						continue;
+					}
+	
+					if (!$piece->canMove($this->board, $to)) {
+						continue;
+					}
+	
+					$captured = $this->board->getPieceAt($to);
+					$this->board->movePiece($from, $to);
+	
+					$stillInCheck = $this->isCheck($color);
+
+					$this->board->movePiece($to, $from);
+					if ($captured !== null) {
+						$captured->setPosition($to);
+						$this->board->placePiece($captured);
+					}
+
+					if (!$stillInCheck) {
+						return false;
+					}
+				}
+			}
+		}
+
+		return true;
+	}
+
 
 	private function setupPieces(): void
 	{
